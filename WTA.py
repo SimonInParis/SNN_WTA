@@ -38,7 +38,7 @@ m_output = bindsnet.network.nodes.LIFNodes(nb_output, traces=True, tc_decay=500)
 model.add_layer(m_input, 'Input')
 model.add_layer(m_hidden, 'Hidden')
 model.add_layer(m_output, 'Output')
-# toto
+# tata
 w_inh = np.zeros((nb_output, nb_output), dtype=np.float32)
 for i in range(nb_output):
     x_i = i%out_width
