@@ -6,6 +6,8 @@ device = 'cuda'
 #for f in files:
 #    os.remove(f)
 
+batch_size = 32
+
 display_step = 15
 
 nb_hidden = 1000
