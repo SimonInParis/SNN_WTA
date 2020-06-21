@@ -10,7 +10,7 @@ for f in files:
     os.remove(f)
 
 poisson_intensity = 100.0
-batch_size = 128
+batch_size = 16
 
 display_step = 2
 
@@ -19,9 +19,9 @@ nb_hidden = 1000
 out_width = 30
 nb_output = out_width * out_width
 
-LR = .00003
-pat_LR = 0.002
-norm_speed = 0.005
+LR = 1e-6   # 1e-6
+pat_LR = 1e-4
+norm_speed = np.power(0.005, batch_size)
 
 sim_duration = 100
 
@@ -141,9 +141,9 @@ for step, batch in enumerate(tqdm(dataloader)):
                 best = d
                 result = i
         if result == label[e]:
-            acc = acc*0.99 + 0.01
+            acc = acc*0.995 + 0.005
         else:
-            acc = acc*0.99
+            acc = acc*0.995
         patterns[label[e], :] = (1.0 - pat_LR) * patterns[label[e], :] + pat_LR * spike_sum
 
     if step % display_step==0:
