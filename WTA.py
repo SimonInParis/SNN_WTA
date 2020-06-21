@@ -10,18 +10,18 @@ for f in files:
     os.remove(f)
 
 poisson_intensity = 100.0
-batch_size = 8
+batch_size = 256
 
-display_step = 2
+display_step = 512 // batch_size
 
 nb_hidden = 1000
 
 out_width = 30
 nb_output = out_width * out_width
 
-LR = 1e-6   # 1e-6
-pat_LR = 1e-4
-norm_speed = np.power(0.005, batch_size)
+LR = 1e-3   # 1e-6
+pat_LR = 2e-3
+norm_speed = np.power(0.01, 32.0 / batch_size)
 
 sim_duration = 50
 
@@ -59,10 +59,10 @@ np.fill_diagonal(w_inh, 0.0)
 print('Avg inh=', np.mean(w_inh))
 
 my_w = np.random.normal(loc=0, scale=c1_wmax*0.5, size=(784, nb_hidden))
-con1 = bindsnet.network.topology.Connection(source=m_input, target=m_hidden, nu=[c1_wmax*LR, c1_wmax*LR], update_rule=bindsnet.learning.PostPre, w=torch.Tensor(my_w), wmin=-c1_wmax, wmax=c1_wmax, weight_decay=0.00001, reduction=torch.sum)
+con1 = bindsnet.network.topology.Connection(source=m_input, target=m_hidden, nu=[c1_wmax*LR, c1_wmax*LR], update_rule=bindsnet.learning.PostPre, w=torch.Tensor(my_w), wmin=-c1_wmax, wmax=c1_wmax, weight_decay=0.00001, reduction=torch.mean)
 
 my_w = np.random.normal(loc=0, scale=c3_wmax*0.5, size=(nb_hidden, nb_output))
-con3 = bindsnet.network.topology.Connection(source=m_hidden, target=m_output, nu=[c3_wmax*LR, c3_wmax*LR], update_rule=bindsnet.learning.PostPre, w=torch.Tensor(my_w), wmin=-c3_wmax, wmax=c3_wmax, weight_decay=0.00001, reduction=torch.sum)
+con3 = bindsnet.network.topology.Connection(source=m_hidden, target=m_output, nu=[c3_wmax*LR, c3_wmax*LR], update_rule=bindsnet.learning.PostPre, w=torch.Tensor(my_w), wmin=-c3_wmax, wmax=c3_wmax, weight_decay=0.00001, reduction=torch.mean)
 
 con4 = bindsnet.network.topology.Connection(source=m_output, target=m_output, nu=[0.0, 0.0], update_rule=bindsnet.learning.NoOp, w=torch.Tensor(w_inh), wmin=-1000.0, wmax=1000.0, reduction=torch.sum)
 
@@ -97,22 +97,24 @@ dataloader = torch.utils.data.DataLoader(
 acc = 0.0
 best_acc = 0.0
 
+
 def first_spikes(s):
     nbt = s.shape[0]
     nbn = s.shape[1]
 
-    first = np.full(nbn, np.exp(-nbt*0.1), dtype=np.float32)
+    time_exp = 0.05
+
+    first = np.full(nbn, nbt, dtype=np.float32)
 
     for i in range(nbn):
         for j in range(nbt):
             if s[j, i]:
-                first[i] = np.exp(-j*0.05)
+                first[i] = j
                 break
-    return first
+    return np.exp(-first * time_exp)
 
 
 patterns = np.zeros(shape=(10, nb_output), dtype=np.float32)
-noise = np.zeros((nb_output), dtype=np.float32)
 
 for step, batch in enumerate(tqdm(dataloader)):
     i = batch["encoded_image"].view(batch_size, sim_duration, 1, 784)
@@ -130,8 +132,6 @@ for step, batch in enumerate(tqdm(dataloader)):
 
     for e in range(batch_size):
         spike_sum = first_spikes(spike_record[:, e, :])
-        if e==0:
-            print('avg time=', np.mean(spike_sum), ' fast =', np.max(spike_sum), ' slow', np.min(spike_sum))
 
         best = 10000000.0
         result = -1
@@ -151,18 +151,18 @@ for step, batch in enumerate(tqdm(dataloader)):
             best_acc = acc
         print('\n accuracy=', 100.0*acc, '%', 'best=', 100.0*best_acc)
         print('w1=', torch.mean(torch.abs(con1.w)).to('cpu').numpy(), 'w3=', torch.mean(torch.abs(con3.w)).to('cpu').numpy())
+        print('avg time=', np.mean(spike_sum), ' fast =', np.max(spike_sum), ' slow', np.min(spike_sum))
 
-        img = 0.0 + 10.0 * 128.0 * spike_sum
+        img = 0.0 + 5.0 * 128.0 * spike_sum
         img = np.reshape(img, (out_width, out_width))
         img = cv2.resize(img, (500, 500), interpolation=cv2.INTER_NEAREST)
         cv2.imwrite('debug/rates'+str(int(label[e]))+'.jpg', img)
 
         for i in range(10):
-           img = 0.0 + 20.0 * 128.0 * patterns[i]
+           img = 0.0 + 5.0 * 128.0 * patterns[i]
            img = np.reshape(img, (out_width, out_width))
            img = cv2.resize(img, (500, 500), interpolation=cv2.INTER_NEAREST)
            cv2.imwrite('debug/pattern'+str(i)+'.jpg', img)
-
 
     # slow re-normalizing
     if True:
