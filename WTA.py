@@ -5,14 +5,14 @@ from torchvision import transforms
 device = 'cuda'
 gpu = True
 
-#files = glob.glob('debug/*.jpg', recursive=True)
-#for f in files:
-#    os.remove(f)
+files = glob.glob('debug/*.jpg', recursive=True)
+for f in files:
+    os.remove(f)
 
 poisson_intensity = 100.0
-batch_size = 32
+batch_size = 128
 
-display_step = 5
+display_step = 2
 
 nb_hidden = 1000
 
@@ -31,7 +31,7 @@ c1_wmax = 2.0
 c3_wmax = 2.0
 
 print('Building network...')
-model = bindsnet.network.Network(dt=1, batch_size=1, learning=True)
+model = bindsnet.network.Network(dt=1, batch_size=batch_size, learning=True)
 
 m_input = bindsnet.network.nodes.Input(784, shape=(1, 784), traces=True)
 m_hidden = bindsnet.network.nodes.LIFNodes(nb_hidden, traces=True, tc_decay=500)
@@ -40,7 +40,7 @@ m_output = bindsnet.network.nodes.LIFNodes(nb_output, traces=True, tc_decay=500)
 model.add_layer(m_input, 'Input')
 model.add_layer(m_hidden, 'Hidden')
 model.add_layer(m_output, 'Output')
-# titi
+
 w_inh = np.zeros((nb_output, nb_output), dtype=np.float32)
 for i in range(nb_output):
     x_i = i%out_width
@@ -67,7 +67,6 @@ con3 = bindsnet.network.topology.Connection(source=m_hidden, target=m_output, nu
 con4 = bindsnet.network.topology.Connection(source=m_output, target=m_output, nu=[0.0, 0.0], update_rule=bindsnet.learning.NoOp, w=torch.Tensor(w_inh), wmin=-1000.0, wmax=1000.0, reduction=torch.sum)
 
 model.add_connection(con1, source='Input', target='Hidden')
-#model.add_connection(con2, source='Hidden', target='Hidden')
 model.add_connection(con3, source='Hidden', target='Output')
 model.add_connection(con4, source='Output', target='Output')
 
@@ -99,8 +98,8 @@ acc = 0.0
 best_acc = 0.0
 
 def first_spikes(s):
-    nbn = s.shape[1]
     nbt = s.shape[0]
+    nbn = s.shape[1]
 
     first = np.full(nbn, np.exp(-nbt*0.1), dtype=np.float32)
 
@@ -116,7 +115,9 @@ patterns = np.zeros(shape=(10, nb_output), dtype=np.float32)
 noise = np.zeros((nb_output), dtype=np.float32)
 
 for step, batch in enumerate(tqdm(dataloader)):
-    inputs = {"Input": batch["encoded_image"].view(sim_duration, batch_size, 1, 784)}
+    i = batch["encoded_image"].view(batch_size, sim_duration, 1, 784)
+    i = i.permute(1, 0, 2, 3)
+    inputs = {"Input": i}
     if gpu:
         inputs = {k: v.cuda() for k, v in inputs.items()}
 
@@ -126,8 +127,6 @@ for step, batch in enumerate(tqdm(dataloader)):
     model.run(inputs=inputs, time=sim_duration, input_time_dim=1)
 
     spike_record = out_spikes.get("s").squeeze().to('cpu').numpy().astype(np.float32)
-
-    #print(spike_record[:, 0, :].shape)
 
     for e in range(batch_size):
         spike_sum = first_spikes(spike_record[:, e, :])
@@ -145,16 +144,14 @@ for step, batch in enumerate(tqdm(dataloader)):
             acc = acc*0.99 + 0.01
         else:
             acc = acc*0.99
+        patterns[label[e], :] = (1.0 - pat_LR) * patterns[label[e], :] + pat_LR * spike_sum
 
     if step % display_step==0:
         if acc>best_acc:
             best_acc = acc
         print('\n accuracy=', 100.0*acc, '%', 'best=', 100.0*best_acc)
-
         print('w1=', torch.mean(torch.abs(con1.w)).to('cpu').numpy(), 'w3=', torch.mean(torch.abs(con3.w)).to('cpu').numpy())
 
-    patterns[label, :] = (1.0 - pat_LR) * patterns[label, :] + pat_LR * spike_sum
-    if step % display_step==0:
         img = 0.0 + 10.0 * 128.0 * spike_sum
         img = np.reshape(img, (out_width, out_width))
         img = cv2.resize(img, (500, 500), interpolation=cv2.INTER_NEAREST)
