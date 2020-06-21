@@ -10,7 +10,7 @@ for f in files:
     os.remove(f)
 
 poisson_intensity = 100.0
-batch_size = 16
+batch_size = 8
 
 display_step = 2
 
