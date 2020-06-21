@@ -23,7 +23,7 @@ LR = 1e-6   # 1e-6
 pat_LR = 1e-4
 norm_speed = np.power(0.005, batch_size)
 
-sim_duration = 100
+sim_duration = 50
 
 inh_level = -1.0
 
